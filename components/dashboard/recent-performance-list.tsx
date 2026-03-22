@@ -5,7 +5,7 @@ interface RecentPerformanceListProps {
   items: RecentPerformanceItem[];
 }
 
-function bandTone(band: RecentPerformanceItem['band']): 'good' | 'neutral' | 'bad' {
+function bandTone(band: RecentPerformanceItem['band']): 'good' | 'warn' | 'bad' {
   if (band === 'overperformance') return 'good';
   if (band === 'underperformance') return 'bad';
   return 'warn';

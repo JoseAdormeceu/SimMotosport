@@ -20,7 +20,7 @@ function formTone(form: WorldState['form']): 'good' | 'bad' | 'neutral' | 'warn'
   return 'neutral';
 }
 
-function bandTone(band: 'overperformance' | 'expected' | 'underperformance'): 'good' | 'neutral' | 'bad' {
+function bandTone(band: 'overperformance' | 'expected' | 'underperformance'): 'good' | 'warn' | 'bad' {
   if (band === 'overperformance') return 'good';
   if (band === 'underperformance') return 'bad';
   return 'warn';
