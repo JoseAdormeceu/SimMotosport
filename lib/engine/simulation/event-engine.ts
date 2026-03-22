@@ -41,6 +41,16 @@ export function narrativeWeightModifier(event: EventDefinition, state: WorldStat
   if (state.flags.actionConflict && (category.includes('teammate') || category.includes('rival') || category.includes('rumor'))) {
     return 1.2;
   }
+
+  const mediaPattern = state.actionMemory.filter((action) => action.category === 'media').length;
+  const conflictPattern = state.actionMemory.filter((action) => action.target === 'rival' || action.tone === 'risky').length;
+
+  if (mediaPattern >= 2 && category.includes('media')) return 1.15;
+  if (conflictPattern >= 2 && (category.includes('fia') || category.includes('backlash') || category.includes('teammate'))) return 1.18;
+
+  if (state.emergentTraits.mediaSavvy >= 60 && category.includes('interview')) return 1.1;
+  if (state.emergentTraits.reckless >= 60 && (category.includes('fia') || category.includes('pressure'))) return 1.15;
+  if (state.emergentTraits.loyal >= 60 && category.includes('team')) return 1.1;
   const intentCategory = state.playerIntent?.category;
   if (intentCategory === 'media' && category.includes('media')) return 1.2;
   if ((intentCategory === 'training' || intentCategory === 'focus') && (category.includes('breakout') || category.includes('performance'))) return 1.15;

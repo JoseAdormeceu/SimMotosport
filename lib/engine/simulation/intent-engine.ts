@@ -1,8 +1,10 @@
 import type {
   DriverState,
+  EmergentTraits,
   IntentCategory,
   IntentTarget,
   IntentTone,
+  PendingConsequence,
   PlayerIntent,
   WorldAction,
   WorldActionResolution,
@@ -91,6 +93,35 @@ function relationshipScore(state: WorldState, target: IntentTarget, targetDriver
   return 20;
 }
 
+function contextModifier(state: WorldState, parsed: ParsedIntent): number {
+  const latestBand = state.recentPerformance[state.recentPerformance.length - 1]?.band;
+
+  let modifier = 0;
+  if (latestBand === 'overperformance') modifier += 2;
+  if (latestBand === 'underperformance') modifier -= 2;
+
+  if (state.narrativeArc === 'breakout-run') modifier += 2;
+  if (state.narrativeArc === 'slump' || state.narrativeArc === 'pressure-building') modifier -= 3;
+
+  if (state.player.publicImage.controversy > 65 && parsed.category === 'media') modifier -= 3;
+  if (state.player.publicImage.controversy > 65 && parsed.category === 'focus') modifier -= 1;
+
+  if (parsed.target === 'team' && (state.teams[0]?.trustInPlayer ?? 50) < 40) modifier -= 2;
+
+  return modifier;
+}
+
+function memoryDifficultyModifier(state: WorldState, parsed: ParsedIntent): number {
+  const similarActions = state.actionMemory.filter((item) => item.category === parsed.category).length;
+  const riskyPatternCount = state.actionMemory.filter((item) => item.tone === 'risky').length;
+
+  let modifier = similarActions >= 3 ? 3 : similarActions >= 1 ? 1 : 0;
+  if (parsed.tone === 'risky') modifier += riskyPatternCount >= 2 ? 4 : 2;
+  if (parsed.category === 'training' && similarActions >= 2) modifier -= 1;
+
+  return modifier;
+}
+
 function capabilityScore(state: WorldState, parsed: ParsedIntent): number {
   const socialSkill = state.player.personality.diplomacy * 0.5 + state.player.personality.mediaSavvy * 0.3;
   const disciplineSkill = state.player.personality.discipline * 0.4 + state.player.skills.consistency * 0.4;
@@ -142,6 +173,132 @@ function actionSummary(parsed: ParsedIntent, resolution: WorldActionResolution):
   return `${actionLabel} produced mixed fallout, opening some doors while adding friction elsewhere.`;
 }
 
+function updatedTraits(previous: EmergentTraits, parsed: ParsedIntent, resolution: WorldActionResolution): EmergentTraits {
+  const bump = resolution === 'success' ? 2 : resolution === 'failure' ? 1 : 1.5;
+
+  return {
+    aggressive: clamp(previous.aggressive + (parsed.tone === 'aggressive' ? bump : -0.3), 0, 100),
+    loyal: clamp(previous.loyal + (parsed.target === 'team' ? bump : -0.2), 0, 100),
+    political: clamp(previous.political + (parsed.category === 'social' || parsed.category === 'media' ? bump : -0.2), 0, 100),
+    reckless: clamp(previous.reckless + (parsed.tone === 'risky' ? bump * 1.2 : -0.3), 0, 100),
+    mediaSavvy: clamp(previous.mediaSavvy + (parsed.category === 'media' ? bump : 0.1), 0, 100),
+  };
+}
+
+function buildFollowUpConsequences(action: WorldAction, world: WorldState): PendingConsequence[] {
+  const dueRound = Math.min(world.currentSeason.totalRounds, world.currentSeason.round + 1);
+  const laterRound = Math.min(world.currentSeason.totalRounds, world.currentSeason.round + 2);
+
+  const consequences: PendingConsequence[] = [];
+
+  if (action.category === 'media') {
+    consequences.push({
+      id: `${action.id}-media`,
+      sourceActionId: action.id,
+      kind: 'media-reaction',
+      dueRound,
+      summary: 'Media cycle amplifies your recent action.',
+      effects: {
+        popularityDelta: action.resolution === 'success' ? 2 : -1,
+        controversyDelta: action.resolution === 'failure' ? 2 : 1,
+        teamTrustDelta: 0,
+        moraleDelta: 0,
+        relationshipTrustDelta: 0,
+        marketValueDelta: action.resolution === 'success' ? 50000 : -15000,
+        fiaScrutinyDelta: action.resolution === 'failure' ? 1 : 0,
+      },
+    });
+  }
+
+  if (action.target === 'team' || action.resolution === 'failure') {
+    consequences.push({
+      id: `${action.id}-team-pressure`,
+      sourceActionId: action.id,
+      kind: 'team-pressure',
+      dueRound,
+      summary: 'Internal team pressure rises in response to your off-track direction.',
+      effects: {
+        popularityDelta: 0,
+        controversyDelta: action.resolution === 'failure' ? 1 : 0,
+        teamTrustDelta: action.resolution === 'success' ? 1 : -2,
+        moraleDelta: action.resolution === 'success' ? 1 : -2,
+        relationshipTrustDelta: 0,
+        marketValueDelta: 0,
+        fiaScrutinyDelta: 0,
+      },
+    });
+  }
+
+  if (action.resolution === 'failure' || action.category === 'social') {
+    consequences.push({
+      id: `${action.id}-contract`,
+      sourceActionId: action.id,
+      kind: 'contract-ripple',
+      dueRound: laterRound,
+      summary: 'Market perception adjusts your contract leverage.',
+      effects: {
+        popularityDelta: 0,
+        controversyDelta: 0,
+        teamTrustDelta: 0,
+        moraleDelta: 0,
+        relationshipTrustDelta: 0,
+        marketValueDelta: action.resolution === 'success' ? 80000 : -40000,
+        fiaScrutinyDelta: 0,
+      },
+    });
+  }
+
+  return consequences;
+}
+
+export function applyPendingConsequences(world: WorldState): WorldState {
+  const due = world.pendingConsequences.filter((item) => item.dueRound <= world.currentSeason.round);
+  if (!due.length) return world;
+
+  const relationshipDelta = due.reduce((sum, item) => sum + item.effects.relationshipTrustDelta, 0);
+
+  const updated: WorldState = {
+    ...world,
+    player: {
+      ...world.player,
+      publicImage: {
+        ...world.player.publicImage,
+        popularity: clamp(world.player.publicImage.popularity + due.reduce((sum, item) => sum + item.effects.popularityDelta, 0), 0, 100),
+        controversy: clamp(world.player.publicImage.controversy + due.reduce((sum, item) => sum + item.effects.controversyDelta, 0), 0, 100),
+      },
+    },
+    teams: world.teams.map((team, index) =>
+      index === 0
+        ? {
+            ...team,
+            trustInPlayer: clamp(team.trustInPlayer + due.reduce((sum, item) => sum + item.effects.teamTrustDelta, 0), 0, 100),
+            morale: clamp(team.morale + due.reduce((sum, item) => sum + item.effects.moraleDelta, 0), 0, 100),
+          }
+        : team,
+    ),
+    relationships: world.relationships.map((relationship, index) =>
+      index === 0 ? { ...relationship, trust: clamp(relationship.trust + relationshipDelta, -100, 100) } : relationship,
+    ),
+    market: {
+      value: Math.max(0, world.market.value + due.reduce((sum, item) => sum + item.effects.marketValueDelta, 0)),
+    },
+    fia: {
+      scrutiny: clamp(world.fia.scrutiny + due.reduce((sum, item) => sum + item.effects.fiaScrutinyDelta, 0), 0, 100),
+    },
+    pendingConsequences: world.pendingConsequences.filter((item) => item.dueRound > world.currentSeason.round),
+    history: [
+      ...due.map((item) => ({
+        id: `hist-followup-${item.id}`,
+        text: `Follow-up consequence: ${item.summary}`,
+        createdAt: world.currentDate,
+      })),
+      ...world.history,
+    ].slice(0, 40),
+  };
+
+  return updated;
+}
+
 export function parseIntent(text: string, drivers: DriverState[]): ParsedIntent {
   const normalized = text.trim().toLowerCase();
   const category = detectCategory(normalized);
@@ -179,11 +336,13 @@ export function resolveWorldAction(world: WorldState, text: string, intent: Play
   const seed = hashString(`${world.currentDate}-${world.currentSeason.round}-${normalized}`);
 
   const baseCapability = capabilityScore(world, parsed);
-  const difficulty = textDifficulty(normalized);
+  const difficulty = textDifficulty(normalized) + memoryDifficultyModifier(world, parsed);
   const tone = toneModifier(parsed.tone);
   const swing = ((seed % 21) - 10) * 0.8;
 
-  const score = Math.round(baseCapability - difficulty + tone.score + swing + relationshipScore(world, parsed.target, parsed.targetDriverId) * 0.1);
+  const score = Math.round(
+    baseCapability - difficulty + tone.score + swing + relationshipScore(world, parsed.target, parsed.targetDriverId) * 0.1 + contextModifier(world, parsed),
+  );
   const resolution = outcomeFromScore(score);
 
   const confidenceDelta =
@@ -265,6 +424,8 @@ export function resolveWorldAction(world: WorldState, text: string, intent: Play
     summary: actionSummary(parsed, resolution),
   };
 
+  const followUps = buildFollowUpConsequences(action, world);
+
   const updatedWorld: WorldState = {
     ...world,
     confidence: clamp(world.confidence + confidenceDelta, 0, 100),
@@ -285,13 +446,15 @@ export function resolveWorldAction(world: WorldState, text: string, intent: Play
           }
         : team,
     ),
-    relationships: world.relationships.map((relationship, index) => {
+    relationships: world.relationships.map((relationship) => {
       const targeted =
         parsed.target === 'specific-driver'
           ? relationship.targetDriverId === parsed.targetDriverId
           : parsed.target === 'rival'
             ? relationship.label === 'rival'
-            : index === 0;
+            : parsed.target === 'team'
+              ? relationship.label === 'ally'
+              : relationship.label === 'rival';
 
       if (!targeted) return relationship;
 
@@ -311,6 +474,9 @@ export function resolveWorldAction(world: WorldState, text: string, intent: Play
     ].slice(0, 40),
     lastAction: action,
     recentActions: [action, ...world.recentActions].slice(0, 8),
+    actionMemory: [action, ...world.actionMemory].slice(0, 40),
+    emergentTraits: updatedTraits(world.emergentTraits, parsed, resolution),
+    pendingConsequences: [...world.pendingConsequences, ...followUps].slice(-20),
     flags: {
       ...world.flags,
       actionPressure: resolution === 'failure',

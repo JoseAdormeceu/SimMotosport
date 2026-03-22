@@ -65,6 +65,31 @@ export const worldActionSchema = z.object({
   summary: z.string(),
 });
 
+export const pendingConsequenceSchema = z.object({
+  id: z.string(),
+  sourceActionId: z.string(),
+  kind: z.enum(['media-reaction', 'team-pressure', 'contract-ripple', 'relationship-echo']),
+  dueRound: z.number().int().min(1),
+  summary: z.string(),
+  effects: z.object({
+    popularityDelta: z.number().default(0),
+    teamTrustDelta: z.number().default(0),
+    moraleDelta: z.number().default(0),
+    controversyDelta: z.number().default(0),
+    relationshipTrustDelta: z.number().default(0),
+    marketValueDelta: z.number().default(0),
+    fiaScrutinyDelta: z.number().default(0),
+  }),
+});
+
+export const emergentTraitsSchema = z.object({
+  aggressive: z.number().min(0).max(100),
+  loyal: z.number().min(0).max(100),
+  political: z.number().min(0).max(100),
+  reckless: z.number().min(0).max(100),
+  mediaSavvy: z.number().min(0).max(100),
+});
+
 export const worldStateSchema = z.object({
   currentDate: z.string(),
   currentCategory: z.enum(['karting', 'f4', 'f3', 'f2', 'f1']),
@@ -89,6 +114,9 @@ export const worldStateSchema = z.object({
   playerIntent: playerIntentSchema.nullable(),
   lastAction: worldActionSchema.nullable(),
   recentActions: z.array(worldActionSchema).max(8),
+  actionMemory: z.array(worldActionSchema).max(40),
+  emergentTraits: emergentTraitsSchema,
+  pendingConsequences: z.array(pendingConsequenceSchema).max(20),
   flags: z.record(z.string(), z.boolean()),
 });
 
@@ -103,4 +131,6 @@ export type IntentTone = z.infer<typeof intentToneSchema>;
 export type IntentTarget = z.infer<typeof intentTargetSchema>;
 export type WorldActionResolution = z.infer<typeof worldActionResolutionSchema>;
 export type WorldAction = z.infer<typeof worldActionSchema>;
+export type PendingConsequence = z.infer<typeof pendingConsequenceSchema>;
+export type EmergentTraits = z.infer<typeof emergentTraitsSchema>;
 export type WorldState = z.infer<typeof worldStateSchema>;

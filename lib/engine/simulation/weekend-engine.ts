@@ -11,6 +11,7 @@ import {
 } from '@/lib/engine/simulation/performance-engine';
 import type { EventInstance, WeekendStage, WeekendSummary, WorldState } from '@/lib/schema';
 import { analyzeForm } from './form-engine';
+import { applyPendingConsequences } from './intent-engine';
 import { applyStandingsUpdate } from './season-engine';
 
 const STAGE_TRANSITIONS: Record<WeekendStage, WeekendStage[]> = {
@@ -184,6 +185,30 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
   const picked = pickEvent(world, seed);
   const spawnedEvent = picked ? materializeEvent(picked, world.currentDate, seed) : null;
 
+  const raceUpdatedWorld = {
+    ...standings.world,
+    confidence: Math.max(0, Math.min(100, world.confidence + confidenceDeltaForFinish(finishPosition))),
+    teams: world.teams.map((team, idx) =>
+      idx === 0
+        ? {
+            ...team,
+            trustInPlayer: Math.max(0, Math.min(100, team.trustInPlayer + teamTrustDeltaFromBandAndForm(band, formAnalysis.form))),
+            morale: Math.max(0, Math.min(100, team.morale + teamMoraleDeltaFromArc(formAnalysis.arc))),
+          }
+        : team,
+    ),
+    inbox: spawnedEvent ? [...world.inbox, spawnedEvent] : world.inbox,
+    lastWeekend: summary,
+    recentPerformance,
+    form: formAnalysis.form,
+    narrativeArc: formAnalysis.arc,
+    playerIntent: world.playerIntent ? { ...world.playerIntent, active: false } : null,
+    currentSeason: {
+      ...standings.world.currentSeason,
+      weekendStage: 'postWeekend' as WeekendStage,
+    },
+  };
+
   return {
     ok: true,
     raceResult,
@@ -191,28 +216,6 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
     expectedFinishPosition: Math.round((expectedFinishPosition + expectedBasePosition) / 2),
     points,
     spawnedEvent,
-    world: {
-      ...standings.world,
-      confidence: Math.max(0, Math.min(100, world.confidence + confidenceDeltaForFinish(finishPosition))),
-      teams: world.teams.map((team, idx) =>
-        idx === 0
-          ? {
-              ...team,
-              trustInPlayer: Math.max(0, Math.min(100, team.trustInPlayer + teamTrustDeltaFromBandAndForm(band, formAnalysis.form))),
-              morale: Math.max(0, Math.min(100, team.morale + teamMoraleDeltaFromArc(formAnalysis.arc))),
-            }
-          : team,
-      ),
-      inbox: spawnedEvent ? [...world.inbox, spawnedEvent] : world.inbox,
-      lastWeekend: summary,
-      recentPerformance,
-      form: formAnalysis.form,
-      narrativeArc: formAnalysis.arc,
-      playerIntent: world.playerIntent ? { ...world.playerIntent, active: false } : null,
-      currentSeason: {
-        ...standings.world.currentSeason,
-        weekendStage: 'postWeekend',
-      },
-    },
+    world: applyPendingConsequences(raceUpdatedWorld),
   };
 }

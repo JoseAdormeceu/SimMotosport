@@ -140,6 +140,9 @@ function withDefaults(base: Partial<WorldState> = {}): WorldState {
     playerIntent: null,
     lastAction: null,
     recentActions: [],
+    actionMemory: [],
+    emergentTraits: { aggressive: 35, loyal: 40, political: 30, reckless: 20, mediaSavvy: 28 },
+    pendingConsequences: [],
     flags: {},
   };
 
