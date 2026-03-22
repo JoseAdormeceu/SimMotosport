@@ -14,12 +14,34 @@ export function listEligibleEvents(state: WorldState): EventDefinition[] {
   });
 }
 
+export function narrativeWeightModifier(event: EventDefinition, state: WorldState): number {
+  const category = event.category.toLowerCase();
+
+  if (state.narrativeArc === 'slump' || state.narrativeArc === 'pressure-building') {
+    if (category.includes('pressure') || category.includes('fia') || category.includes('backlash')) return 1.35;
+    if (category.includes('breakout')) return 0.8;
+  }
+
+  if (state.narrativeArc === 'breakout-run' || state.narrativeArc === 'recovery') {
+    if (category.includes('breakout') || category.includes('interview') || category.includes('academy')) return 1.3;
+    if (category.includes('backlash')) return 0.85;
+  }
+
+  if (state.form === 'volatile' && category.includes('rumor')) return 1.2;
+
+  return 1;
+}
+
 export function pickEvent(state: WorldState, seed: number): EventDefinition | null {
   const eligible = listEligibleEvents(state);
   if (!eligible.length) return null;
   const rng = createSeededRng(seed);
+
   return weightedChoice(
-    eligible.map((item) => ({ item, weight: item.weight })),
+    eligible.map((item) => ({
+      item,
+      weight: Math.max(0.1, item.weight * narrativeWeightModifier(item, state)),
+    })),
     rng,
   );
 }

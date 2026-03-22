@@ -77,6 +77,8 @@ export function buildPerformanceInput(world: WorldState, seed: number): Performa
     weatherVolatility: 35 + (seed % 20),
     morale: world.teams[0]?.morale ?? 50,
     confidence: world.confidence,
+    form: world.form,
+    narrativeArc: world.narrativeArc,
   };
 }
 
@@ -117,6 +119,19 @@ export function simulateQualifyingStep(world: WorldState, seed: number): Qualify
       },
     },
   };
+}
+
+
+function teamTrustDeltaFromBandAndForm(band: 'overperformance' | 'expected' | 'underperformance', form: WorldState['form']): number {
+  if (band === 'overperformance') return form === 'improving' ? 3 : 2;
+  if (band === 'underperformance') return form === 'declining' ? -3 : -2;
+  return form === 'consistent' ? 1 : 0;
+}
+
+function teamMoraleDeltaFromArc(arc: WorldState['narrativeArc']): number {
+  if (arc === 'breakout-run' || arc === 'recovery') return 2;
+  if (arc === 'slump' || arc === 'pressure-building') return -2;
+  return 0;
 }
 
 export function confidenceDeltaForFinish(finish: number): number {
@@ -178,6 +193,15 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
     world: {
       ...standings.world,
       confidence: Math.max(0, Math.min(100, world.confidence + confidenceDeltaForFinish(finishPosition))),
+      teams: world.teams.map((team, idx) =>
+        idx === 0
+          ? {
+              ...team,
+              trustInPlayer: Math.max(0, Math.min(100, team.trustInPlayer + teamTrustDeltaFromBandAndForm(band, formAnalysis.form))),
+              morale: Math.max(0, Math.min(100, team.morale + teamMoraleDeltaFromArc(formAnalysis.arc))),
+            }
+          : team,
+      ),
       inbox: spawnedEvent ? [...world.inbox, spawnedEvent] : world.inbox,
       lastWeekend: summary,
       recentPerformance,
