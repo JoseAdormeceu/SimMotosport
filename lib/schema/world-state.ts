@@ -48,6 +48,23 @@ export const playerIntentSchema = z.object({
   active: z.boolean(),
 });
 
+export const worldActionResolutionSchema = z.enum(['success', 'mixed', 'failure']);
+
+export const worldActionSchema = z.object({
+  id: z.string(),
+  text: z.string().min(1),
+  category: intentCategorySchema,
+  tone: intentToneSchema,
+  target: intentTargetSchema,
+  targetDriverId: z.string().optional(),
+  tags: z.array(z.string()).min(1),
+  createdAt: z.string(),
+  resolution: worldActionResolutionSchema,
+  score: z.number(),
+  difficulty: z.number(),
+  summary: z.string(),
+});
+
 export const worldStateSchema = z.object({
   currentDate: z.string(),
   currentCategory: z.enum(['karting', 'f4', 'f3', 'f2', 'f1']),
@@ -70,6 +87,8 @@ export const worldStateSchema = z.object({
   form: formLabelSchema,
   narrativeArc: narrativeArcSchema,
   playerIntent: playerIntentSchema.nullable(),
+  lastAction: worldActionSchema.nullable(),
+  recentActions: z.array(worldActionSchema).max(8),
   flags: z.record(z.string(), z.boolean()),
 });
 
@@ -82,4 +101,6 @@ export type PlayerIntent = z.infer<typeof playerIntentSchema>;
 export type IntentCategory = z.infer<typeof intentCategorySchema>;
 export type IntentTone = z.infer<typeof intentToneSchema>;
 export type IntentTarget = z.infer<typeof intentTargetSchema>;
+export type WorldActionResolution = z.infer<typeof worldActionResolutionSchema>;
+export type WorldAction = z.infer<typeof worldActionSchema>;
 export type WorldState = z.infer<typeof worldStateSchema>;

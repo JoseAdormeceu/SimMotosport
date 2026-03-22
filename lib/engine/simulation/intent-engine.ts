@@ -1,4 +1,13 @@
-import type { DriverState, IntentCategory, IntentTarget, IntentTone, PlayerIntent, WorldState } from '@/lib/schema';
+import type {
+  DriverState,
+  IntentCategory,
+  IntentTarget,
+  IntentTone,
+  PlayerIntent,
+  WorldAction,
+  WorldActionResolution,
+  WorldState,
+} from '@/lib/schema';
 
 export interface ParsedIntent {
   category: IntentCategory;
@@ -8,20 +17,27 @@ export interface ParsedIntent {
   tags: string[];
 }
 
+export interface ActionResolutionResult {
+  action: WorldAction;
+  world: WorldState;
+}
+
 const CATEGORY_RULES: Array<{ category: IntentCategory; words: string[] }> = [
-  { category: 'training', words: ['train', 'practice', 'fitness', 'sim', 'prepare'] },
-  { category: 'social', words: ['visit', 'meet', 'friend', 'rival', 'talk'] },
-  { category: 'media', words: ['media', 'press', 'interview', 'headline', 'news'] },
-  { category: 'lifestyle', words: ['rest', 'sleep', 'family', 'vacation', 'calm'] },
-  { category: 'focus', words: ['focus', 'ignore', 'concentrate', 'mindset'] },
+  { category: 'training', words: ['train', 'practice', 'fitness', 'sim', 'prepare', 'learn', 'coach'] },
+  { category: 'social', words: ['visit', 'meet', 'friend', 'rival', 'talk', 'apologize', 'argue', 'confront'] },
+  { category: 'media', words: ['media', 'press', 'interview', 'headline', 'news', 'spin', 'leak'] },
+  { category: 'lifestyle', words: ['rest', 'sleep', 'family', 'vacation', 'party', 'nightlife'] },
+  { category: 'focus', words: ['focus', 'ignore', 'concentrate', 'mindset', 'discipline'] },
 ];
 
 const TONE_RULES: Array<{ tone: IntentTone; words: string[] }> = [
-  { tone: 'aggressive', words: ['aggressive', 'hard', 'push', 'attack', 'limits'] },
-  { tone: 'risky', words: ['risky', 'gamble', 'bold', 'chance'] },
-  { tone: 'safe', words: ['safe', 'careful', 'steady', 'controlled'] },
-  { tone: 'relaxed', words: ['relaxed', 'calm', 'easy', 'recover'] },
+  { tone: 'aggressive', words: ['aggressive', 'hard', 'push', 'attack', 'limits', 'dominate'] },
+  { tone: 'risky', words: ['risky', 'gamble', 'bold', 'chance', 'danger', 'reckless'] },
+  { tone: 'safe', words: ['safe', 'careful', 'steady', 'controlled', 'measured'] },
+  { tone: 'relaxed', words: ['relaxed', 'calm', 'easy', 'recover', 'reset'] },
 ];
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 function scoreMatch(text: string, words: string[]): number {
   return words.reduce((score, word) => (text.includes(word) ? score + 1 : score), 0);
@@ -47,9 +63,83 @@ function detectTarget(text: string, drivers: DriverState[]): Pick<ParsedIntent, 
   const match = drivers.find((driver) => text.includes(driver.name.toLowerCase()));
   if (match) return { target: 'specific-driver', targetDriverId: match.id };
 
-  if (text.includes('team') || text.includes('crew')) return { target: 'team' };
-  if (text.includes('rival')) return { target: 'rival' };
+  if (text.includes('team') || text.includes('crew') || text.includes('engineer')) return { target: 'team' };
+  if (text.includes('rival') || text.includes('opponent')) return { target: 'rival' };
   return { target: 'self' };
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % 2147483647;
+  }
+  return hash;
+}
+
+function relationshipScore(state: WorldState, target: IntentTarget, targetDriverId?: string): number {
+  if (target === 'team') return (state.teams[0]?.trustInPlayer ?? 50) / 2;
+
+  if (target === 'rival' || target === 'specific-driver') {
+    const relationship = state.relationships.find((item) =>
+      target === 'specific-driver' && targetDriverId ? item.targetDriverId === targetDriverId : item.label === 'rival',
+    );
+
+    if (!relationship) return 10;
+    return relationship.trust * 0.3 + relationship.respect * 0.2 - relationship.hostility * 0.2;
+  }
+
+  return 20;
+}
+
+function capabilityScore(state: WorldState, parsed: ParsedIntent): number {
+  const socialSkill = state.player.personality.diplomacy * 0.5 + state.player.personality.mediaSavvy * 0.3;
+  const disciplineSkill = state.player.personality.discipline * 0.4 + state.player.skills.consistency * 0.4;
+
+  if (parsed.category === 'training') {
+    return state.player.skills.feedbackQuality * 0.25 + state.player.skills.adaptability * 0.25 + state.confidence * 0.2 + (state.teams[0]?.morale ?? 50) * 0.1;
+  }
+
+  if (parsed.category === 'social') {
+    return socialSkill + relationshipScore(state, parsed.target, parsed.targetDriverId) * 0.35;
+  }
+
+  if (parsed.category === 'media') {
+    return state.player.personality.mediaSavvy * 0.55 + state.player.publicImage.respect * 0.2 - state.player.publicImage.controversy * 0.15;
+  }
+
+  if (parsed.category === 'lifestyle') {
+    return disciplineSkill + (100 - state.fia.scrutiny) * 0.1;
+  }
+
+  return state.confidence * 0.35 + disciplineSkill;
+}
+
+function textDifficulty(text: string): number {
+  const hardWords = ['manipulate', 'threaten', 'blackmail', 'leak', 'party', 'risk', 'crash', 'sabotage', 'confront'];
+  const keywordPressure = hardWords.reduce((score, word) => (text.includes(word) ? score + 8 : score), 0);
+  const lengthPressure = Math.min(8, Math.floor(text.split(' ').length / 3));
+  return 20 + keywordPressure + lengthPressure;
+}
+
+function toneModifier(tone: IntentTone): { score: number; volatility: number } {
+  if (tone === 'aggressive') return { score: 2, volatility: 5 };
+  if (tone === 'risky') return { score: -1, volatility: 8 };
+  if (tone === 'relaxed') return { score: 1, volatility: 2 };
+  return { score: 0, volatility: 1 };
+}
+
+function outcomeFromScore(score: number): WorldActionResolution {
+  if (score >= 12) return 'success';
+  if (score <= -8) return 'failure';
+  return 'mixed';
+}
+
+function actionSummary(parsed: ParsedIntent, resolution: WorldActionResolution): string {
+  const actionLabel = `${parsed.category} action targeting ${parsed.target === 'specific-driver' ? 'a specific driver' : parsed.target}`;
+
+  if (resolution === 'success') return `${actionLabel} landed cleanly and improved your short-term narrative leverage.`;
+  if (resolution === 'failure') return `${actionLabel} backfired, increasing pressure and creating narrative drag.`;
+  return `${actionLabel} produced mixed fallout, opening some doors while adding friction elsewhere.`;
 }
 
 export function parseIntent(text: string, drivers: DriverState[]): ParsedIntent {
@@ -58,7 +148,7 @@ export function parseIntent(text: string, drivers: DriverState[]): ParsedIntent 
   const tone = detectTone(normalized);
   const targetResult = detectTarget(normalized, drivers);
 
-  const tags = [category, tone, targetResult.target === 'specific-driver' ? 'specific driver' : targetResult.target];
+  const tags = [category, tone, targetResult.target === 'specific-driver' ? 'specific driver' : targetResult.target, 'world-action'];
 
   return {
     category,
@@ -83,21 +173,164 @@ export function buildIntent(text: string, world: WorldState): PlayerIntent {
   };
 }
 
-export function applyIntentImmediateEffects(world: WorldState, intent: PlayerIntent): WorldState {
-  const confidenceDelta = intent.category === 'training' ? 2 : intent.category === 'focus' ? 1 : 0;
-  const trustDelta = intent.target === 'team' ? 2 : intent.target === 'self' ? 0 : -1;
-  const relationshipDelta = intent.target === 'rival' || intent.target === 'specific-driver' ? 2 : 0;
+export function resolveWorldAction(world: WorldState, text: string, intent: PlayerIntent): ActionResolutionResult {
+  const parsed = parseIntent(text, world.drivers);
+  const normalized = text.trim().toLowerCase();
+  const seed = hashString(`${world.currentDate}-${world.currentSeason.round}-${normalized}`);
 
-  return {
+  const baseCapability = capabilityScore(world, parsed);
+  const difficulty = textDifficulty(normalized);
+  const tone = toneModifier(parsed.tone);
+  const swing = ((seed % 21) - 10) * 0.8;
+
+  const score = Math.round(baseCapability - difficulty + tone.score + swing + relationshipScore(world, parsed.target, parsed.targetDriverId) * 0.1);
+  const resolution = outcomeFromScore(score);
+
+  const confidenceDelta =
+    parsed.category === 'training'
+      ? resolution === 'success'
+        ? 3
+        : resolution === 'failure'
+          ? -2
+          : 1
+      : resolution === 'success'
+        ? 2
+        : resolution === 'failure'
+          ? -2
+          : 0;
+
+  const teamTrustDelta =
+    parsed.target === 'team'
+      ? resolution === 'success'
+        ? 3
+        : resolution === 'failure'
+          ? -3
+          : 1
+      : resolution === 'failure'
+        ? -1
+        : 0;
+
+  const popularityDelta =
+    parsed.category === 'media'
+      ? resolution === 'success'
+        ? 4
+        : resolution === 'failure'
+          ? -2
+          : 1
+      : resolution === 'success'
+        ? 1
+        : 0;
+
+  const controversyDelta =
+    parsed.tone === 'risky' || parsed.category === 'media'
+      ? resolution === 'success'
+        ? 1
+        : resolution === 'failure'
+          ? 4
+          : 2
+      : resolution === 'failure'
+        ? 1
+        : 0;
+
+  const relationshipTrustDelta =
+    parsed.target === 'rival' || parsed.target === 'specific-driver'
+      ? resolution === 'success'
+        ? 3
+        : resolution === 'failure'
+          ? -4
+          : 1
+      : 0;
+
+  const hostilityDelta =
+    parsed.target === 'rival' || parsed.target === 'specific-driver'
+      ? resolution === 'success'
+        ? -2
+        : resolution === 'failure'
+          ? 4
+          : 1
+      : 0;
+
+  const action: WorldAction = {
+    id: `action-${seed}`,
+    text,
+    category: parsed.category,
+    tone: parsed.tone,
+    target: parsed.target,
+    targetDriverId: parsed.targetDriverId,
+    tags: [...parsed.tags, resolution],
+    createdAt: world.currentDate,
+    resolution,
+    score,
+    difficulty: Math.round(difficulty + tone.volatility),
+    summary: actionSummary(parsed, resolution),
+  };
+
+  const updatedWorld: WorldState = {
     ...world,
-    confidence: Math.max(0, Math.min(100, world.confidence + confidenceDelta)),
+    confidence: clamp(world.confidence + confidenceDelta, 0, 100),
+    player: {
+      ...world.player,
+      publicImage: {
+        ...world.player.publicImage,
+        popularity: clamp(world.player.publicImage.popularity + popularityDelta, 0, 100),
+        controversy: clamp(world.player.publicImage.controversy + controversyDelta, 0, 100),
+      },
+    },
     teams: world.teams.map((team, index) =>
-      index === 0 ? { ...team, trustInPlayer: Math.max(0, Math.min(100, team.trustInPlayer + trustDelta)) } : team,
+      index === 0
+        ? {
+            ...team,
+            trustInPlayer: clamp(team.trustInPlayer + teamTrustDelta, 0, 100),
+            morale: clamp(team.morale + (resolution === 'success' ? 1 : resolution === 'failure' ? -2 : 0), 0, 100),
+          }
+        : team,
     ),
-    relationships: world.relationships.map((rel, index) =>
-      index === 0 ? { ...rel, trust: Math.max(-100, Math.min(100, rel.trust + relationshipDelta)) } : rel,
-    ),
-    playerIntent: intent,
+    relationships: world.relationships.map((relationship, index) => {
+      const targeted =
+        parsed.target === 'specific-driver'
+          ? relationship.targetDriverId === parsed.targetDriverId
+          : parsed.target === 'rival'
+            ? relationship.label === 'rival'
+            : index === 0;
+
+      if (!targeted) return relationship;
+
+      return {
+        ...relationship,
+        trust: clamp(relationship.trust + relationshipTrustDelta, -100, 100),
+        hostility: clamp(relationship.hostility + hostilityDelta, -100, 100),
+      };
+    }),
+    history: [
+      {
+        id: `hist-action-${action.id}`,
+        text: `World action (${action.resolution}): ${text}`,
+        createdAt: world.currentDate,
+      },
+      ...world.history,
+    ].slice(0, 40),
+    lastAction: action,
+    recentActions: [action, ...world.recentActions].slice(0, 8),
+    flags: {
+      ...world.flags,
+      actionPressure: resolution === 'failure',
+      actionHype: resolution === 'success' && (parsed.category === 'media' || parsed.category === 'training'),
+      actionConflict: parsed.target === 'rival' && resolution !== 'success',
+    },
+  };
+
+  return { action, world: updatedWorld };
+}
+
+export function applyIntentImmediateEffects(world: WorldState, intent: PlayerIntent): WorldState {
+  const resolution = resolveWorldAction(world, intent.text, intent);
+  return {
+    ...resolution.world,
+    playerIntent: {
+      ...intent,
+      active: resolution.action.resolution !== 'failure',
+      tags: [...intent.tags, resolution.action.resolution],
+    },
   };
 }
 

@@ -138,6 +138,8 @@ function withDefaults(base: Partial<WorldState> = {}): WorldState {
     form: 'consistent',
     narrativeArc: 'neutral',
     playerIntent: null,
+    lastAction: null,
+    recentActions: [],
     flags: {},
   };
 

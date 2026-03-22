@@ -29,6 +29,18 @@ export function narrativeWeightModifier(event: EventDefinition, state: WorldStat
 
   if (state.form === 'volatile' && category.includes('rumor')) return 1.2;
 
+
+  if (state.flags.actionPressure) {
+    if (category.includes('pressure') || category.includes('fia') || category.includes('backlash')) return 1.2;
+  }
+
+  if (state.flags.actionHype) {
+    if (category.includes('breakout') || category.includes('academy') || category.includes('media')) return 1.15;
+  }
+
+  if (state.flags.actionConflict && (category.includes('teammate') || category.includes('rival') || category.includes('rumor'))) {
+    return 1.2;
+  }
   const intentCategory = state.playerIntent?.category;
   if (intentCategory === 'media' && category.includes('media')) return 1.2;
   if ((intentCategory === 'training' || intentCategory === 'focus') && (category.includes('breakout') || category.includes('performance'))) return 1.15;
