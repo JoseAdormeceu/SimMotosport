@@ -1,3 +1,4 @@
+import { classifyPerformanceBand } from '@/lib/engine/generators/headline-generator';
 import { materializeEvent, pickEvent } from '@/lib/engine/simulation/event-engine';
 import {
   pointsForFinish,
@@ -9,6 +10,7 @@ import {
   type SessionResult,
 } from '@/lib/engine/simulation/performance-engine';
 import type { EventInstance, WeekendStage, WeekendSummary, WorldState } from '@/lib/schema';
+import { analyzeForm } from './form-engine';
 import { applyStandingsUpdate } from './season-engine';
 
 const STAGE_TRANSITIONS: Record<WeekendStage, WeekendStage[]> = {
@@ -148,6 +150,20 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
     notes: [...world.lastWeekend.notes, `Race score ${raceResult.score.toFixed(1)}`],
   };
 
+
+  const band = classifyPerformanceBand(finishPosition, Math.round((expectedFinishPosition + expectedBasePosition) / 2));
+  const recentPerformance = [
+    ...world.recentPerformance,
+    {
+      round: world.currentSeason.round,
+      finishPosition,
+      expectedPosition: Math.round((expectedFinishPosition + expectedBasePosition) / 2),
+      points,
+      band,
+    },
+  ].slice(-5);
+  const formAnalysis = analyzeForm(recentPerformance, world.player.publicImage.controversy);
+
   const standings = applyStandingsUpdate(world, points);
   const picked = pickEvent(world, seed);
   const spawnedEvent = picked ? materializeEvent(picked, world.currentDate, seed) : null;
@@ -164,6 +180,9 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
       confidence: Math.max(0, Math.min(100, world.confidence + confidenceDeltaForFinish(finishPosition))),
       inbox: spawnedEvent ? [...world.inbox, spawnedEvent] : world.inbox,
       lastWeekend: summary,
+      recentPerformance,
+      form: formAnalysis.form,
+      narrativeArc: formAnalysis.arc,
       currentSeason: {
         ...standings.world.currentSeason,
         weekendStage: 'postWeekend',

@@ -13,7 +13,9 @@ describe('headline generation', () => {
       finishPosition: 3,
       expectedPosition: 8,
       reputation: 65,
-      recentForm: 72,
+      recentFormScore: 72,
+      recentFormLabel: 'improving',
+      narrativeArc: 'breakout-run',
       controversy: 20,
     } as const;
 
@@ -29,7 +31,9 @@ describe('headline generation', () => {
       finishPosition: 14,
       expectedPosition: 8,
       reputation: 42,
-      recentForm: 30,
+      recentFormScore: 30,
+      recentFormLabel: 'declining',
+      narrativeArc: 'pressure-building',
       controversy: 78,
     });
 

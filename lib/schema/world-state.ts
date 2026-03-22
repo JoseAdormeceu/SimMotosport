@@ -22,6 +22,17 @@ export const weekendSummarySchema = z.object({
   notes: z.array(z.string()),
 });
 
+export const recentPerformanceItemSchema = z.object({
+  round: z.number().int().min(1),
+  finishPosition: z.number().int().min(1),
+  expectedPosition: z.number().int().min(1),
+  points: z.number().int().min(0),
+  band: z.enum(['overperformance', 'expected', 'underperformance']),
+});
+
+export const formLabelSchema = z.enum(['improving', 'declining', 'consistent', 'volatile']);
+export const narrativeArcSchema = z.enum(['breakout-run', 'slump', 'consistency-streak', 'pressure-building', 'recovery', 'neutral']);
+
 export const worldStateSchema = z.object({
   currentDate: z.string(),
   currentCategory: z.enum(['karting', 'f4', 'f3', 'f2', 'f1']),
@@ -40,9 +51,15 @@ export const worldStateSchema = z.object({
   inbox: z.array(eventInstanceSchema),
   newsFeed: z.array(newsItemSchema),
   lastWeekend: weekendSummarySchema.nullable(),
+  recentPerformance: z.array(recentPerformanceItemSchema).max(5),
+  form: formLabelSchema,
+  narrativeArc: narrativeArcSchema,
   flags: z.record(z.string(), z.boolean()),
 });
 
 export type DriverState = z.infer<typeof driverStateSchema>;
 export type WeekendSummary = z.infer<typeof weekendSummarySchema>;
+export type RecentPerformanceItem = z.infer<typeof recentPerformanceItemSchema>;
+export type FormLabel = z.infer<typeof formLabelSchema>;
+export type NarrativeArc = z.infer<typeof narrativeArcSchema>;
 export type WorldState = z.infer<typeof worldStateSchema>;

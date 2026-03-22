@@ -1,5 +1,6 @@
-import { headlineTemplates } from '@/lib/data/templates/headlines';
+import { arcFragments, formFragments, headlineTemplates } from '@/lib/data/templates/headlines';
 import { createSeededRng } from '@/lib/engine/utils/random';
+import type { FormLabel, NarrativeArc } from '@/lib/schema';
 
 export type HeadlineTone = 'neutral' | 'praise' | 'criticism' | 'hype';
 export type PerformanceBand = 'overperformance' | 'expected' | 'underperformance';
@@ -12,7 +13,9 @@ export interface RaceHeadlineContext {
   finishPosition: number;
   expectedPosition: number;
   reputation: number;
-  recentForm: number;
+  recentFormScore: number;
+  recentFormLabel: FormLabel;
+  narrativeArc: NarrativeArc;
   controversy: number;
 }
 
@@ -31,8 +34,9 @@ export function classifyPerformanceBand(finishPosition: number, expectedPosition
 
 export function selectHeadlineTone(context: RaceHeadlineContext, band: PerformanceBand): HeadlineTone {
   if (context.controversy >= 70 && band !== 'overperformance') return 'criticism';
-  if (band === 'overperformance' && context.reputation >= 60 && context.recentForm >= 60) return 'hype';
-  if (band === 'underperformance' && context.recentForm < 45) return 'criticism';
+  if (band === 'overperformance' && context.reputation >= 60 && context.recentFormScore >= 60) return 'hype';
+  if (band === 'underperformance' && context.recentFormScore < 45) return 'criticism';
+  if (context.recentFormLabel === 'improving' && band !== 'underperformance') return 'praise';
   if (band === 'expected' && context.reputation >= 65) return 'praise';
   if (context.controversy >= 50 && band === 'overperformance') return 'hype';
   return 'neutral';
@@ -53,11 +57,13 @@ export function createRaceHeadline(context: RaceHeadlineContext): {
   const band = classifyPerformanceBand(context.finishPosition, context.expectedPosition);
   const tone = selectHeadlineTone(context, band);
 
-  const pool = headlineTemplates[band][tone] ?? headlineTemplates[band].neutral;
-  const template = choose(pool, context.seed + context.round * 101);
+  const basePool = headlineTemplates[band][tone] ?? headlineTemplates[band].neutral;
+  const baseTemplate = choose(basePool, context.seed + context.round * 101);
+  const formFragment = choose(formFragments[context.recentFormLabel], context.seed + context.round * 211);
+  const arcFragment = choose(arcFragments[context.narrativeArc], context.seed + context.round * 307);
 
   return {
-    headline: fillTemplate(template, context),
+    headline: `${fillTemplate(baseTemplate, context)} ${formFragment} ${arcFragment}`,
     tone,
     band,
   };

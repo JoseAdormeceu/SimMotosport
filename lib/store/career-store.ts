@@ -132,6 +132,9 @@ function withDefaults(base: Partial<WorldState> = {}): WorldState {
     inbox: [],
     newsFeed: [],
     lastWeekend: null,
+    recentPerformance: [],
+    form: 'consistent',
+    narrativeArc: 'neutral',
     flags: {},
   };
 
@@ -226,7 +229,9 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
         finishPosition: result.finishPosition,
         expectedPosition: result.expectedFinishPosition ?? result.finishPosition,
         reputation: state.world.player.publicImage.respect,
-        recentForm: 100 - state.world.currentSeason.championshipPosition * 4,
+        recentFormScore: 100 - state.world.currentSeason.championshipPosition * 4,
+        recentFormLabel: result.world.form,
+        narrativeArc: result.world.narrativeArc,
         controversy: state.world.player.publicImage.controversy,
       });
 
