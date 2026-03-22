@@ -1,15 +1,9 @@
 import { create } from 'zustand';
-import type { Decision, EventDefinition, EventInstance, WeekendSummary, WorldState } from '@/lib/schema';
+import { applyDecisionEffects, appendNews, clampCriticalState } from '@/lib/engine/simulation/career-engine';
+import { materializeEvent } from '@/lib/engine/simulation/event-engine';
+import { simulateQualifyingStep, simulateRaceStep, transitionWeekendStage } from '@/lib/engine/simulation/weekend-engine';
+import type { Decision, EventDefinition, EventInstance, WorldState } from '@/lib/schema';
 import { worldStateSchema } from '@/lib/schema';
-import { materializeEvent, pickEvent } from '@/lib/engine/simulation/event-engine';
-import {
-  pointsForFinish,
-  raceScoreToFinish,
-  scoreToGridPosition,
-  simulatePerformance,
-  simulateQualifying,
-  simulateRace,
-} from '@/lib/engine/simulation/performance-engine';
 import { saveCareerToStorage } from '@/lib/persistence/local-storage';
 
 export interface CreateCareerInput {
@@ -32,10 +26,6 @@ interface CareerStore {
   simulateRace: (seed?: number) => void;
   simulateWeekend: (seed?: number) => void;
   advanceSeasonPhase: () => void;
-}
-
-function clamp(value: number, min = 0, max = 100): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function withDefaults(base: Partial<WorldState> = {}): WorldState {
@@ -144,109 +134,33 @@ function withDefaults(base: Partial<WorldState> = {}): WorldState {
     flags: {},
   };
 
-  return worldStateSchema.parse({ ...template, ...base });
+  return clampCriticalState(worldStateSchema.parse({ ...template, ...base }));
 }
 
 const initialWorld = withDefaults();
 
-function applyChoiceToWorld(world: WorldState, event: EventInstance, choiceId: string): WorldState {
-  const choice = event.choices.find((item) => item.id === choiceId);
-  if (!choice) return world;
-  const fx = choice.effects;
-
-  const updated: WorldState = {
-    ...world,
-    confidence: clamp(world.confidence + fx.confidenceDelta),
-    market: { value: Math.max(0, world.market.value + fx.marketValueDelta) },
-    player: {
-      ...world.player,
-      publicImage: {
-        ...world.player.publicImage,
-        popularity: clamp(world.player.publicImage.popularity + fx.popularityDelta),
-        respect: clamp(world.player.publicImage.respect + fx.respectDelta),
-        controversy: clamp(world.player.publicImage.controversy + fx.controversyDelta),
-      },
-    },
-    teams: world.teams.map((team, idx) =>
-      idx === 0
-        ? {
-            ...team,
-            trustInPlayer: clamp(team.trustInPlayer + fx.teamTrustDelta),
-            morale: clamp(team.morale + fx.moraleDelta),
-          }
-        : team,
-    ),
-    fia: { scrutiny: clamp(world.fia.scrutiny + fx.fiaScrutinyDelta) },
-    relationships: world.relationships.map((rel, idx) =>
-      idx === 0
-        ? {
-            ...rel,
-            trust: clamp(rel.trust + fx.relationshipDelta, -100, 100),
-            hostility: clamp(rel.hostility - Math.round(fx.relationshipDelta / 2), -100, 100),
-          }
-        : rel,
-    ),
-    inbox: world.inbox.filter((item) => item.id !== event.id),
-    history: [
-      {
-        id: `hist-choice-${event.id}`,
-        text: `Decision on ${event.title}: ${choice.label}`,
-        createdAt: world.currentDate,
-      },
-      ...world.history,
-    ].slice(0, 40),
-  };
-
-  return worldStateSchema.parse(updated);
-}
-
-function buildPerformanceInput(world: WorldState, seed: number) {
-  return {
-    seed,
-    rawPace: world.player.skills.rawPace,
-    qualifyingPace: world.player.skills.qualifyingPace,
-    racePace: world.player.skills.racePace,
-    consistency: world.player.skills.consistency,
-    pressureHandling: world.player.skills.pressureHandling,
-    teamStrength: world.teams[0]?.carStrength ?? 50,
-    weatherVolatility: 35 + (seed % 20),
-    morale: world.teams[0]?.morale ?? 50,
-    confidence: world.confidence,
-  };
-}
-
-function appendNews(world: WorldState, headline: string, summary: string, tags: string[]): WorldState {
-  return {
-    ...world,
-    newsFeed: [{ id: `news-${world.newsFeed.length + 1}-${world.currentDate}`, headline, summary, tags, createdAt: world.currentDate }, ...world.newsFeed].slice(0, 8),
-  };
-}
-
 export const useCareerStore = create<CareerStore>((set, get) => ({
   world: initialWorld,
   createCareer: (input) =>
-    set(() =>
-      ({
-        world: withDefaults({
-          player: {
-            ...initialWorld.player,
-            id: `player-${(input.seed ?? 1) + 1}`,
-            name: input.name,
-            nationality: input.nationality,
-            archetype: input.archetype,
-          },
-        }),
+    set(() => ({
+      world: withDefaults({
+        player: {
+          ...initialWorld.player,
+          id: `player-${(input.seed ?? 1) + 1}`,
+          name: input.name,
+          nationality: input.nationality,
+          archetype: input.archetype,
+        },
       }),
-    ),
-  loadCareer: (world) => set({ world: worldStateSchema.parse(world) }),
+    })),
+  loadCareer: (world) => set({ world: clampCriticalState(worldStateSchema.parse(world)) }),
   saveCareer: () => saveCareerToStorage(get().world),
   advanceDay: () =>
     set((state) => {
       const date = new Date(state.world.currentDate);
       date.setUTCDate(date.getUTCDate() + 1);
-      const nextDate = date.toISOString().slice(0, 10);
 
-      const nextStage =
+      const stageTarget =
         state.world.currentSeason.weekendStage === 'idle'
           ? 'qualifying'
           : state.world.currentSeason.weekendStage === 'qualifying'
@@ -255,14 +169,13 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
               ? 'postWeekend'
               : 'idle';
 
+      const transition = transitionWeekendStage(state.world, stageTarget);
+      if (!transition.ok) return state;
+
       return {
         world: {
-          ...state.world,
-          currentDate: nextDate,
-          currentSeason: {
-            ...state.world.currentSeason,
-            weekendStage: nextStage,
-          },
+          ...transition.world,
+          currentDate: date.toISOString().slice(0, 10),
         },
       };
     }),
@@ -278,68 +191,37 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
     set((state) => {
       const event = state.world.inbox.find((item) => item.id === decision.eventInstanceId);
       if (!event) return state;
-      return { world: applyChoiceToWorld(state.world, event, decision.choiceId) };
+      const result = applyDecisionEffects(state.world, event, decision.choiceId);
+      if (!result.ok) return state;
+      return { world: result.world };
     }),
   simulateQualifying: (seed = 101) =>
     set((state) => {
-      if (state.world.currentSeason.weekendStage === 'postWeekend') return state;
-      const qual = simulateQualifying(buildPerformanceInput(state.world, seed));
-      const qualifyingPosition = scoreToGridPosition(qual.score);
-      const interim: WeekendSummary = {
-        venue: state.world.currentSeason.nextVenue,
-        qualifyingPosition,
-        racePosition: qualifyingPosition,
-        pointsEarned: 0,
-        notes: [`Qualifying score ${qual.score.toFixed(1)}`],
-      };
+      const result = simulateQualifyingStep(state.world, seed);
+      if (!result.ok || !result.qualifyingResult || !result.qualifyingPosition) return state;
+
       return {
         world: appendNews(
-          {
-            ...state.world,
-            lastWeekend: interim,
-            currentSeason: { ...state.world.currentSeason, weekendStage: 'race' },
-          },
-          `Qualified P${qualifyingPosition} at ${state.world.currentSeason.nextVenue}`,
-          `Session delta ${qual.expectedDelta.toFixed(1)} vs expectation.`,
+          result.world,
+          `Qualified P${result.qualifyingPosition} at ${state.world.currentSeason.nextVenue}`,
+          `Session delta ${result.qualifyingResult.expectedDelta.toFixed(1)} vs expectation.`,
           ['qualifying'],
         ),
       };
     }),
   simulateRace: (seed = 202) =>
     set((state) => {
-      const last = state.world.lastWeekend;
-      if (!last) return state;
+      const result = simulateRaceStep(state.world, seed);
+      if (!result.ok || !result.raceResult || !result.finishPosition || result.points === undefined) return state;
 
-      const race = simulateRace(buildPerformanceInput(state.world, seed));
-      const finish = raceScoreToFinish(race.score, last.qualifyingPosition);
-      const points = pointsForFinish(finish);
-      const summary: WeekendSummary = {
-        ...last,
-        racePosition: finish,
-        pointsEarned: points,
-        notes: [...last.notes, `Race score ${race.score.toFixed(1)}`],
+      return {
+        world: appendNews(
+          clampCriticalState(result.world),
+          `Race finish P${result.finishPosition} at ${state.world.currentSeason.nextVenue}`,
+          result.points > 0 ? `Scored ${result.points} points and triggered paddock reaction.` : 'No points, pressure is rising.',
+          ['race'],
+        ),
       };
-
-      const picked = pickEvent(state.world, seed);
-      const maybeEvent = picked ? materializeEvent(picked, state.world.currentDate, seed) : null;
-      const updated = appendNews(
-        {
-          ...state.world,
-          lastWeekend: summary,
-          inbox: maybeEvent ? [...state.world.inbox, maybeEvent] : state.world.inbox,
-          confidence: clamp(state.world.confidence + (finish <= 5 ? 4 : finish >= 14 ? -4 : 0)),
-          currentSeason: {
-            ...state.world.currentSeason,
-            weekendStage: 'postWeekend',
-            round: Math.min(state.world.currentSeason.totalRounds, state.world.currentSeason.round + 1),
-            playerPoints: state.world.currentSeason.playerPoints + points,
-          },
-        },
-        `Race finish P${finish} at ${state.world.currentSeason.nextVenue}`,
-        points > 0 ? `Scored ${points} points and triggered paddock reaction.` : 'No points, pressure is rising.',
-        ['race'],
-      );
-      return { world: worldStateSchema.parse(updated) };
     }),
   simulateWeekend: (seed = 99) => {
     get().simulateQualifying(seed);
