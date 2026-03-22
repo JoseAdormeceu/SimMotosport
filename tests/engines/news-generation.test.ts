@@ -43,9 +43,9 @@ describe('headline generation', () => {
 });
 
 describe('news feed dedup', () => {
-  test('deduplicates repeated ids and headlines', () => {
+  test('deduplicates repeated ids and repeated headlines', () => {
     const world = structuredClone(useCareerStore.getState().world);
-    const once = appendNews(world, {
+    const first = appendNews(world, {
       id: 'news-race-r1-s1',
       headline: 'Ari Vega drags the car to P3 in a statement drive at Monza',
       summary: 'test',
@@ -53,9 +53,9 @@ describe('news feed dedup', () => {
       createdAt: world.currentDate,
     });
 
-    const duplicateId = appendNews(once, {
+    const duplicateId = appendNews(first, {
       id: 'news-race-r1-s1',
-      headline: 'Different headline',
+      headline: 'Ari Vega drags the car to P3 in a statement drive at Monza',
       summary: 'test-2',
       tags: ['race'],
       createdAt: world.currentDate,

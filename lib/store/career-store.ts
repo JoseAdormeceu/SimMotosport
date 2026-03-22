@@ -3,6 +3,7 @@ import { applyDecisionEffects, appendNews, clampCriticalState } from '@/lib/engi
 import { createNewsId, createRaceHeadline } from '@/lib/engine/generators/headline-generator';
 import { materializeEvent } from '@/lib/engine/simulation/event-engine';
 import { simulateQualifyingStep, simulateRaceStep, transitionWeekendStage } from '@/lib/engine/simulation/weekend-engine';
+import { applyIntentImmediateEffects, buildIntent } from '@/lib/engine/simulation/intent-engine';
 import type { Decision, EventDefinition, EventInstance, WorldState } from '@/lib/schema';
 import { worldStateSchema } from '@/lib/schema';
 import { saveCareerToStorage } from '@/lib/persistence/local-storage';
@@ -27,6 +28,7 @@ interface CareerStore {
   simulateRace: (seed?: number) => void;
   simulateWeekend: (seed?: number) => void;
   advanceSeasonPhase: () => void;
+  submitIntent: (text: string) => void;
 }
 
 function withDefaults(base: Partial<WorldState> = {}): WorldState {
@@ -135,6 +137,7 @@ function withDefaults(base: Partial<WorldState> = {}): WorldState {
     recentPerformance: [],
     form: 'consistent',
     narrativeArc: 'neutral',
+    playerIntent: null,
     flags: {},
   };
 
@@ -252,6 +255,14 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
     get().simulateQualifying(seed);
     get().simulateRace(seed + 1);
   },
+
+  submitIntent: (text) =>
+    set((state) => {
+      if (!text.trim()) return state;
+      const intent = buildIntent(text, state.world);
+      const updated = applyIntentImmediateEffects(state.world, intent);
+      return { world: clampCriticalState(updated) };
+    }),
   advanceSeasonPhase: () =>
     set((state) => {
       const current = state.world.currentSeason.phase;

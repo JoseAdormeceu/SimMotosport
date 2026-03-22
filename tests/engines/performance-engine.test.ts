@@ -14,6 +14,7 @@ const input = {
   confidence: 58,
   form: 'consistent' as const,
   narrativeArc: 'neutral' as const,
+  playerIntent: null,
 };
 
 describe('performance engine', () => {

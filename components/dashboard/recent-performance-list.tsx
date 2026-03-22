@@ -8,7 +8,7 @@ interface RecentPerformanceListProps {
 function bandTone(band: RecentPerformanceItem['band']): 'good' | 'neutral' | 'bad' {
   if (band === 'overperformance') return 'good';
   if (band === 'underperformance') return 'bad';
-  return 'neutral';
+  return 'warn';
 }
 
 export function RecentPerformanceList({ items }: RecentPerformanceListProps) {
@@ -17,11 +17,11 @@ export function RecentPerformanceList({ items }: RecentPerformanceListProps) {
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2.5">
       {[...items].reverse().map((item) => (
-        <li key={`rp-${item.round}`} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
+        <li key={`rp-${item.round}`} className="flex items-center justify-between rounded-xl border border-slate-800/90 bg-zinc-900/60 px-4 py-3">
           <div>
-            <p className="text-sm text-slate-200">Round {item.round}: P{item.finishPosition}</p>
+            <p className="text-sm font-medium text-slate-100">Round {item.round}: P{item.finishPosition}</p>
             <p className="text-xs text-slate-400">Expected P{item.expectedPosition} · {item.points} pts</p>
           </div>
           <Badge label={item.band.replace('-', ' ')} tone={bandTone(item.band)} />

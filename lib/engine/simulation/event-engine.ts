@@ -29,6 +29,11 @@ export function narrativeWeightModifier(event: EventDefinition, state: WorldStat
 
   if (state.form === 'volatile' && category.includes('rumor')) return 1.2;
 
+  const intentCategory = state.playerIntent?.category;
+  if (intentCategory === 'media' && category.includes('media')) return 1.2;
+  if ((intentCategory === 'training' || intentCategory === 'focus') && (category.includes('breakout') || category.includes('performance'))) return 1.15;
+  if (intentCategory === 'social' && category.includes('friendship')) return 1.2;
+
   return 1;
 }
 

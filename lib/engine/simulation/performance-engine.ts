@@ -1,4 +1,5 @@
-import type { FormLabel, NarrativeArc } from '@/lib/schema';
+import type { FormLabel, NarrativeArc, PlayerIntent } from '@/lib/schema';
+import { intentPerformanceModifiers } from './intent-engine';
 import { clamp } from '../utils/clamps';
 import { createSeededRng } from '../utils/random';
 
@@ -15,6 +16,7 @@ export interface PerformanceInput {
   confidence: number;
   form: FormLabel;
   narrativeArc: NarrativeArc;
+  playerIntent: PlayerIntent | null;
 }
 
 export interface SessionResult {
@@ -78,16 +80,17 @@ function makeScore(base: number, swing: number): number {
 
 export function simulateQualifying(input: PerformanceInput): SessionResult {
   const form = getFormModifiers(input.form, input.narrativeArc);
+  const intent = intentPerformanceModifiers(input.playerIntent);
   const rng = createSeededRng(input.seed * 17 + 3);
-  const effectiveConsistency = clamp(input.consistency + form.consistencyDelta, 0, 100);
-  const effectiveConfidence = clamp(input.confidence + form.confidenceDelta, 0, 100);
+  const effectiveConsistency = clamp(input.consistency + form.consistencyDelta + intent.consistency, 0, 100);
+  const effectiveConfidence = clamp(input.confidence + form.confidenceDelta + intent.confidence, 0, 100);
 
   const base = input.rawPace * 0.25 + input.qualifyingPace * 0.35 + input.teamStrength * 0.25 + effectiveConfidence * 0.1 + input.morale * 0.05;
   const swing = (rng.next() - 0.5) * (12 + input.weatherVolatility * 0.22);
   const rawScore = makeScore(base, swing);
   const expected = input.rawPace * 0.45 + input.teamStrength * 0.55;
 
-  const mistakeRisk = clamp(28 - effectiveConsistency * 0.12 - input.pressureHandling * 0.08 + form.mistakeRiskDelta, 2, 50);
+  const mistakeRisk = clamp(28 - effectiveConsistency * 0.12 - input.pressureHandling * 0.08 + form.mistakeRiskDelta + intent.mistakeRisk, 2, 50);
   const incidentApplied = maybeApplyIncident(rawScore, mistakeRisk, input.seed * 17 + 5);
 
   return {
@@ -100,16 +103,17 @@ export function simulateQualifying(input: PerformanceInput): SessionResult {
 
 export function simulateRace(input: PerformanceInput): SessionResult {
   const form = getFormModifiers(input.form, input.narrativeArc);
+  const intent = intentPerformanceModifiers(input.playerIntent);
   const rng = createSeededRng(input.seed * 17 + 11);
-  const effectiveConsistency = clamp(input.consistency + form.consistencyDelta, 0, 100);
-  const effectiveConfidence = clamp(input.confidence + form.confidenceDelta, 0, 100);
+  const effectiveConsistency = clamp(input.consistency + form.consistencyDelta + intent.consistency, 0, 100);
+  const effectiveConfidence = clamp(input.confidence + form.confidenceDelta + intent.confidence, 0, 100);
 
   const base = input.rawPace * 0.2 + input.racePace * 0.35 + effectiveConsistency * 0.2 + input.teamStrength * 0.2 + input.pressureHandling * 0.05;
   const swing = (rng.next() - 0.5) * (14 + input.weatherVolatility * 0.28);
   const rawScore = makeScore(base, swing + (effectiveConfidence - input.confidence) * 0.12);
   const expected = input.racePace * 0.5 + input.teamStrength * 0.5;
 
-  const mistakeRisk = clamp(34 - effectiveConsistency * 0.2 - input.pressureHandling * 0.12 + input.weatherVolatility * 0.09 + form.mistakeRiskDelta, 5, 65);
+  const mistakeRisk = clamp(34 - effectiveConsistency * 0.2 - input.pressureHandling * 0.12 + input.weatherVolatility * 0.09 + form.mistakeRiskDelta + intent.mistakeRisk, 5, 65);
   const incidentApplied = maybeApplyIncident(rawScore, mistakeRisk, input.seed * 17 + 13);
 
   return {

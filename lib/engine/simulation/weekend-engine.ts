@@ -79,6 +79,7 @@ export function buildPerformanceInput(world: WorldState, seed: number): Performa
     confidence: world.confidence,
     form: world.form,
     narrativeArc: world.narrativeArc,
+    playerIntent: world.playerIntent,
   };
 }
 
@@ -207,6 +208,7 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
       recentPerformance,
       form: formAnalysis.form,
       narrativeArc: formAnalysis.arc,
+      playerIntent: world.playerIntent ? { ...world.playerIntent, active: false } : null,
       currentSeason: {
         ...standings.world.currentSeason,
         weekendStage: 'postWeekend',

@@ -33,6 +33,21 @@ export const recentPerformanceItemSchema = z.object({
 export const formLabelSchema = z.enum(['improving', 'declining', 'consistent', 'volatile']);
 export const narrativeArcSchema = z.enum(['breakout-run', 'slump', 'consistency-streak', 'pressure-building', 'recovery', 'neutral']);
 
+export const intentCategorySchema = z.enum(['training', 'social', 'media', 'lifestyle', 'focus']);
+export const intentToneSchema = z.enum(['aggressive', 'relaxed', 'risky', 'safe']);
+export const intentTargetSchema = z.enum(['self', 'team', 'rival', 'specific-driver']);
+
+export const playerIntentSchema = z.object({
+  text: z.string().min(1),
+  category: intentCategorySchema,
+  tone: intentToneSchema,
+  target: intentTargetSchema,
+  targetDriverId: z.string().optional(),
+  tags: z.array(z.string()).min(1),
+  submittedAt: z.string(),
+  active: z.boolean(),
+});
+
 export const worldStateSchema = z.object({
   currentDate: z.string(),
   currentCategory: z.enum(['karting', 'f4', 'f3', 'f2', 'f1']),
@@ -54,6 +69,7 @@ export const worldStateSchema = z.object({
   recentPerformance: z.array(recentPerformanceItemSchema).max(5),
   form: formLabelSchema,
   narrativeArc: narrativeArcSchema,
+  playerIntent: playerIntentSchema.nullable(),
   flags: z.record(z.string(), z.boolean()),
 });
 
@@ -62,4 +78,8 @@ export type WeekendSummary = z.infer<typeof weekendSummarySchema>;
 export type RecentPerformanceItem = z.infer<typeof recentPerformanceItemSchema>;
 export type FormLabel = z.infer<typeof formLabelSchema>;
 export type NarrativeArc = z.infer<typeof narrativeArcSchema>;
+export type PlayerIntent = z.infer<typeof playerIntentSchema>;
+export type IntentCategory = z.infer<typeof intentCategorySchema>;
+export type IntentTone = z.infer<typeof intentToneSchema>;
+export type IntentTarget = z.infer<typeof intentTargetSchema>;
 export type WorldState = z.infer<typeof worldStateSchema>;
