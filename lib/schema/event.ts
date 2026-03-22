@@ -7,12 +7,15 @@ export const effectBundleSchema = z.object({
   teamTrustDelta: z.number().default(0),
   fiaScrutinyDelta: z.number().default(0),
   relationshipDelta: z.number().default(0),
+  moraleDelta: z.number().default(0),
+  confidenceDelta: z.number().default(0),
+  marketValueDelta: z.number().default(0),
 });
 
 export const eventChoiceSchema = z.object({
   id: z.string(),
   label: z.string(),
-  tone: z.enum(['calm', 'aggressive', 'political', 'honest', 'deflective']),
+  tone: z.enum(['calm', 'aggressive', 'political', 'honest', 'deflective', 'diplomatic']),
   effects: effectBundleSchema,
   followupEventIds: z.array(z.string()).optional(),
 });

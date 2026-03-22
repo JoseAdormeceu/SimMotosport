@@ -3,57 +3,103 @@ import { createSeededRng } from '../utils/random';
 
 export interface PerformanceInput {
   seed: number;
-  skill: number;
+  rawPace: number;
+  qualifyingPace: number;
+  racePace: number;
   consistency: number;
   pressureHandling: number;
   teamStrength: number;
   weatherVolatility: number;
   morale: number;
+  confidence: number;
+}
+
+export interface SessionResult {
+  score: number;
+  expectedDelta: number;
+  mistakeRisk: number;
 }
 
 export interface PerformanceResult {
-  qualifyingScore: number;
-  raceScore: number;
-  mistakeChance: number;
+  qualifying: SessionResult;
+  race: SessionResult;
   overperformance: boolean;
   underperformance: boolean;
   notes: string[];
 }
 
-export function simulatePerformance(input: PerformanceInput): PerformanceResult {
-  const rng = createSeededRng(input.seed);
-  const base = input.skill * 0.4 + input.teamStrength * 0.3 + input.morale * 0.1 + input.consistency * 0.2;
-  const variance = (rng.next() - 0.5) * (20 + input.weatherVolatility * 0.2);
-  const qualifyingScore = clamp(base + variance, 0, 100);
-  const raceConsistencyFactor = (input.consistency + input.pressureHandling) / 2;
-  const raceVariance = (rng.next() - 0.5) * (16 + input.weatherVolatility * 0.25);
-  const raceScore = clamp(base * 0.9 + raceConsistencyFactor * 0.1 + raceVariance, 0, 100);
+function makeScore(base: number, swing: number): number {
+  return clamp(base + swing, 0, 100);
+}
 
-  const mistakeChance = clamp(
-    35 - input.consistency * 0.2 - input.pressureHandling * 0.15 + input.weatherVolatility * 0.15,
-    1,
-    60,
-  );
-
-  const expected = input.skill * 0.65 + input.teamStrength * 0.35;
-  const combined = (qualifyingScore + raceScore) / 2;
-  const delta = combined - expected;
-
-  const overperformance = delta > 7;
-  const underperformance = delta < -7;
-  const notes: string[] = [];
-
-  if (overperformance) notes.push('heroic execution in difficult conditions');
-  if (underperformance) notes.push('weekend lacked expected sharpness');
-  if (!overperformance && !underperformance) notes.push('clinical and composed weekend');
-  if (mistakeChance > 30) notes.push('error pressure remained elevated');
+export function simulateQualifying(input: PerformanceInput): SessionResult {
+  const rng = createSeededRng(input.seed * 17 + 3);
+  const base =
+    input.rawPace * 0.25 +
+    input.qualifyingPace * 0.35 +
+    input.teamStrength * 0.25 +
+    input.confidence * 0.1 +
+    input.morale * 0.05;
+  const swing = (rng.next() - 0.5) * (12 + input.weatherVolatility * 0.22);
+  const score = makeScore(base, swing);
+  const expected = input.rawPace * 0.45 + input.teamStrength * 0.55;
 
   return {
-    qualifyingScore,
-    raceScore,
-    mistakeChance,
-    overperformance,
-    underperformance,
+    score,
+    expectedDelta: score - expected,
+    mistakeRisk: clamp(28 - input.consistency * 0.12 - input.pressureHandling * 0.08, 3, 45),
+  };
+}
+
+export function simulateRace(input: PerformanceInput): SessionResult {
+  const rng = createSeededRng(input.seed * 17 + 11);
+  const base =
+    input.rawPace * 0.2 +
+    input.racePace * 0.35 +
+    input.consistency * 0.2 +
+    input.teamStrength * 0.2 +
+    input.pressureHandling * 0.05;
+  const swing = (rng.next() - 0.5) * (14 + input.weatherVolatility * 0.28);
+  const score = makeScore(base, swing);
+  const expected = input.racePace * 0.5 + input.teamStrength * 0.5;
+
+  return {
+    score,
+    expectedDelta: score - expected,
+    mistakeRisk: clamp(34 - input.consistency * 0.2 - input.pressureHandling * 0.12 + input.weatherVolatility * 0.09, 5, 60),
+  };
+}
+
+export function simulatePerformance(input: PerformanceInput): PerformanceResult {
+  const qualifying = simulateQualifying(input);
+  const race = simulateRace(input);
+  const combinedDelta = (qualifying.expectedDelta + race.expectedDelta) / 2;
+
+  const notes: string[] = [];
+  if (combinedDelta > 8) notes.push('outperformed machinery across the weekend');
+  if (combinedDelta < -8) notes.push('underperformed versus car potential');
+  if (!notes.length) notes.push('delivered close to baseline expectation');
+  if (race.mistakeRisk >= 30) notes.push('high race volatility increased incident risk');
+
+  return {
+    qualifying,
+    race,
+    overperformance: combinedDelta > 8,
+    underperformance: combinedDelta < -8,
     notes,
   };
+}
+
+export function scoreToGridPosition(score: number): number {
+  return clamp(Math.round(22 - score / 5), 1, 20);
+}
+
+export function raceScoreToFinish(score: number, qualifyingPosition: number): number {
+  const pacePosition = scoreToGridPosition(score);
+  return clamp(Math.round((pacePosition * 0.7 + qualifyingPosition * 0.3)), 1, 20);
+}
+
+export function pointsForFinish(position: number): number {
+  const table = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+  return table[position - 1] ?? 0;
 }

@@ -1,5 +1,5 @@
 import { starterEvents } from '@/lib/data/events/career-events';
-import type { EventDefinition, WorldState } from '@/lib/schema';
+import type { EventDefinition, EventInstance, WorldState } from '@/lib/schema';
 import { createSeededRng } from '../utils/random';
 import { weightedChoice } from '../utils/weighted-choice';
 
@@ -22,4 +22,15 @@ export function pickEvent(state: WorldState, seed: number): EventDefinition | nu
     eligible.map((item) => ({ item, weight: item.weight })),
     rng,
   );
+}
+
+export function materializeEvent(definition: EventDefinition, currentDate: string, seed: number): EventInstance {
+  return {
+    id: `evt-${definition.id}-${seed}`,
+    definitionId: definition.id,
+    title: definition.title,
+    description: definition.descriptionTemplate,
+    choices: definition.choices,
+    createdAt: currentDate,
+  };
 }

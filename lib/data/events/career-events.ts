@@ -1,5 +1,17 @@
 import type { EventDefinition } from '@/lib/schema';
 
+const z = {
+  popularityDelta: 0,
+  respectDelta: 0,
+  controversyDelta: 0,
+  teamTrustDelta: 0,
+  fiaScrutinyDelta: 0,
+  relationshipDelta: 0,
+  moraleDelta: 0,
+  confidenceDelta: 0,
+  marketValueDelta: 0,
+};
+
 export const starterEvents: EventDefinition[] = [
   {
     id: 'media-pressure',
@@ -10,8 +22,8 @@ export const starterEvents: EventDefinition[] = [
     tags: ['media', 'pressure'],
     descriptionTemplate: 'Questions intensify around your rapid rise.',
     choices: [
-      { id: 'mp-calm', label: 'Stay measured', tone: 'calm', effects: { popularityDelta: 2, respectDelta: 2 } },
-      { id: 'mp-bold', label: 'Call critics out', tone: 'aggressive', effects: { popularityDelta: 5, controversyDelta: 6 } },
+      { id: 'mp-calm', label: 'Stay measured', tone: 'calm', effects: { ...z, popularityDelta: 2, respectDelta: 3, controversyDelta: -2 } },
+      { id: 'mp-bold', label: 'Attack the narrative', tone: 'aggressive', effects: { ...z, popularityDelta: 6, controversyDelta: 8, fiaScrutinyDelta: 2 } },
     ],
   },
   {
@@ -22,17 +34,23 @@ export const starterEvents: EventDefinition[] = [
     weight: 7,
     tags: ['contract'],
     descriptionTemplate: 'A better team tests your loyalty.',
-    choices: [{ id: 'co-listen', label: 'Listen', tone: 'political', effects: { teamTrustDelta: -4, respectDelta: 1 } }],
+    choices: [
+      { id: 'co-listen', label: 'Hear the offer', tone: 'political', effects: { ...z, marketValueDelta: 150000, teamTrustDelta: -6, respectDelta: 1 } },
+      { id: 'co-reject', label: 'Reject publicly', tone: 'honest', effects: { ...z, marketValueDelta: -20000, teamTrustDelta: 5, popularityDelta: 1 } },
+    ],
   },
   {
     id: 'teammate-tension',
     title: 'Teammate Tension',
     category: 'teammate tension',
     trigger: { minRound: 1 },
-    weight: 7,
+    weight: 6,
     tags: ['relationship'],
-    descriptionTemplate: 'Your teammate feels sidelined.',
-    choices: [{ id: 'tt-bridge', label: 'Build bridges', tone: 'diplomatic', effects: { relationshipDelta: 6, respectDelta: 2 } } as any],
+    descriptionTemplate: 'Your teammate feels sidelined after strategy calls.',
+    choices: [
+      { id: 'tt-bridge', label: 'Reach out privately', tone: 'diplomatic', effects: { ...z, relationshipDelta: 8, respectDelta: 2, confidenceDelta: 1 } },
+      { id: 'tt-dismiss', label: 'Dismiss concerns', tone: 'aggressive', effects: { ...z, relationshipDelta: -10, controversyDelta: 4, confidenceDelta: 2 } },
+    ],
   },
   {
     id: 'fia-warning',
@@ -42,7 +60,10 @@ export const starterEvents: EventDefinition[] = [
     weight: 5,
     tags: ['fia'],
     descriptionTemplate: 'Stewards note aggressive radio behavior.',
-    choices: [{ id: 'fw-apologize', label: 'Issue apology', tone: 'calm', effects: { fiaScrutinyDelta: -7, controversyDelta: -2 } }],
+    choices: [
+      { id: 'fw-apologize', label: 'Issue apology', tone: 'calm', effects: { ...z, fiaScrutinyDelta: -9, controversyDelta: -2, confidenceDelta: -1 } },
+      { id: 'fw-double', label: 'Double down', tone: 'aggressive', effects: { ...z, fiaScrutinyDelta: 10, popularityDelta: 3, controversyDelta: 6 } },
+    ],
   },
   {
     id: 'friendship-rival',
@@ -51,18 +72,24 @@ export const starterEvents: EventDefinition[] = [
     trigger: { minRound: 2 },
     weight: 4,
     tags: ['relationship'],
-    descriptionTemplate: 'A rival seeks private truce talks.',
-    choices: [{ id: 'fr-accept', label: 'Accept meeting', tone: 'honest', effects: { relationshipDelta: 8, respectDelta: 2 } }],
+    descriptionTemplate: 'A rival offers a truce after a hard race.',
+    choices: [
+      { id: 'fr-accept', label: 'Accept truce', tone: 'honest', effects: { ...z, relationshipDelta: 10, respectDelta: 2 } },
+      { id: 'fr-reject', label: 'Keep rivalry alive', tone: 'aggressive', effects: { ...z, relationshipDelta: -8, popularityDelta: 2, controversyDelta: 2 } },
+    ],
   },
   {
     id: 'paddock-rumor',
     title: 'Paddock Rumor',
     category: 'paddock rumor',
     trigger: { minRound: 1 },
-    weight: 8,
+    weight: 7,
     tags: ['media'],
     descriptionTemplate: 'Rumors claim you are forcing team politics.',
-    choices: [{ id: 'pr-deny', label: 'Deny strongly', tone: 'deflective', effects: { controversyDelta: 2, popularityDelta: 1 } }],
+    choices: [
+      { id: 'pr-deny', label: 'Deny strongly', tone: 'deflective', effects: { ...z, controversyDelta: 3, popularityDelta: 2 } },
+      { id: 'pr-ignore', label: 'Ignore story', tone: 'calm', effects: { ...z, respectDelta: 2, popularityDelta: -1 } },
+    ],
   },
   {
     id: 'sponsor-pressure',
@@ -72,7 +99,10 @@ export const starterEvents: EventDefinition[] = [
     weight: 6,
     tags: ['commercial'],
     descriptionTemplate: 'A sponsor requests safer messaging.',
-    choices: [{ id: 'sp-comply', label: 'Comply', tone: 'political', effects: { popularityDelta: -1, teamTrustDelta: 2 } }],
+    choices: [
+      { id: 'sp-comply', label: 'Comply', tone: 'political', effects: { ...z, popularityDelta: -2, teamTrustDelta: 3, marketValueDelta: 60000 } },
+      { id: 'sp-resist', label: 'Resist request', tone: 'honest', effects: { ...z, popularityDelta: 3, controversyDelta: 3, marketValueDelta: -25000 } },
+    ],
   },
   {
     id: 'moral-dilemma',
@@ -81,8 +111,11 @@ export const starterEvents: EventDefinition[] = [
     trigger: { minRound: 5 },
     weight: 5,
     tags: ['ethics'],
-    descriptionTemplate: 'You are asked to back off for strategy optics.',
-    choices: [{ id: 'md-refuse', label: 'Refuse', tone: 'aggressive', effects: { respectDelta: 4, teamTrustDelta: -8, controversyDelta: 3 } }],
+    descriptionTemplate: 'You are asked to yield position for strategy optics.',
+    choices: [
+      { id: 'md-obey', label: 'Obey team order', tone: 'political', effects: { ...z, teamTrustDelta: 8, confidenceDelta: -3, respectDelta: -1 } },
+      { id: 'md-refuse', label: 'Refuse order', tone: 'aggressive', effects: { ...z, respectDelta: 4, teamTrustDelta: -10, controversyDelta: 4, confidenceDelta: 3 } },
+    ],
   },
   {
     id: 'breakout-performance',
@@ -92,17 +125,23 @@ export const starterEvents: EventDefinition[] = [
     weight: 6,
     tags: ['performance'],
     descriptionTemplate: 'Analysts call your pace generational.',
-    choices: [{ id: 'bp-embrace', label: 'Embrace hype', tone: 'honest', effects: { popularityDelta: 7, pressureHandling: 0 } as any }],
+    choices: [
+      { id: 'bp-embrace', label: 'Embrace hype', tone: 'honest', effects: { ...z, popularityDelta: 8, confidenceDelta: 4, controversyDelta: 2 } },
+      { id: 'bp-deflect', label: 'Credit team', tone: 'diplomatic', effects: { ...z, respectDelta: 5, teamTrustDelta: 4, confidenceDelta: 1 } },
+    ],
   },
   {
     id: 'public-backlash',
     title: 'Public Backlash',
     category: 'public backlash',
-    trigger: { minRound: 2, minControversy: 40 },
+    trigger: { minRound: 2, minControversy: 35 },
     weight: 4,
     tags: ['fans'],
     descriptionTemplate: 'Fan sentiment turns after a heated quote.',
-    choices: [{ id: 'pb-reset', label: 'Reset tone', tone: 'calm', effects: { popularityDelta: 3, controversyDelta: -5 } }],
+    choices: [
+      { id: 'pb-reset', label: 'Reset tone', tone: 'calm', effects: { ...z, popularityDelta: 4, controversyDelta: -6 } },
+      { id: 'pb-escalate', label: 'Escalate conflict', tone: 'aggressive', effects: { ...z, popularityDelta: 2, controversyDelta: 8, respectDelta: -2 } },
+    ],
   },
   {
     id: 'bold-interview',
@@ -112,7 +151,10 @@ export const starterEvents: EventDefinition[] = [
     weight: 7,
     tags: ['media'],
     descriptionTemplate: 'Prime-time interview gives one headline quote.',
-    choices: [{ id: 'bi-shot', label: 'Take a shot at rivals', tone: 'aggressive', effects: { popularityDelta: 4, controversyDelta: 5 } }],
+    choices: [
+      { id: 'bi-shot', label: 'Take a shot at rivals', tone: 'aggressive', effects: { ...z, popularityDelta: 5, controversyDelta: 5, confidenceDelta: 2 } },
+      { id: 'bi-composed', label: 'Stay composed', tone: 'calm', effects: { ...z, respectDelta: 4, popularityDelta: 1, controversyDelta: -1 } },
+    ],
   },
   {
     id: 'academy-interest',
@@ -122,6 +164,9 @@ export const starterEvents: EventDefinition[] = [
     weight: 5,
     tags: ['contract'],
     descriptionTemplate: 'An elite academy wants your signature.',
-    choices: [{ id: 'ai-sign', label: 'Sign provisional deal', tone: 'political', effects: { marketValueDelta: 0, respectDelta: 2 } as any }],
+    choices: [
+      { id: 'ai-sign', label: 'Sign provisional deal', tone: 'political', effects: { ...z, marketValueDelta: 180000, teamTrustDelta: -4, respectDelta: 1 } },
+      { id: 'ai-wait', label: 'Wait and evaluate', tone: 'calm', effects: { ...z, marketValueDelta: 40000, confidenceDelta: 1, teamTrustDelta: 1 } },
+    ],
   },
 ];

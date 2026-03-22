@@ -22,12 +22,15 @@ describe('decision application', () => {
           label: 'Answer calmly',
           tone: 'calm',
           effects: {
-            popularityDelta: 3,
+            popularityDelta: 5,
             respectDelta: 2,
             controversyDelta: -1,
-            teamTrustDelta: 0,
+            teamTrustDelta: 4,
             fiaScrutinyDelta: -2,
-            relationshipDelta: 0,
+            relationshipDelta: 3,
+            moraleDelta: 2,
+            confidenceDelta: 6,
+            marketValueDelta: 120000,
           },
         },
       ],
@@ -41,8 +44,10 @@ describe('decision application', () => {
     });
 
     const updated = useCareerStore.getState().world;
-    expect(updated.player.publicImage.popularity).toBe(base.player.publicImage.popularity + 3);
+    expect(updated.player.publicImage.popularity).toBe(base.player.publicImage.popularity + 5);
     expect(updated.fia.scrutiny).toBe(base.fia.scrutiny - 2);
+    expect(updated.teams[0].trustInPlayer).toBe(base.teams[0].trustInPlayer + 4);
+    expect(updated.market.value).toBe(base.market.value + 120000);
     expect(updated.inbox.find((item) => item.id === 'evt-1')).toBeUndefined();
   });
 });
