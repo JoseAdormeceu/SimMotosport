@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { applyDecisionEffects, appendNews, clampCriticalState } from '@/lib/engine/simulation/career-engine';
+import { createNewsId, createRaceHeadline } from '@/lib/engine/generators/headline-generator';
 import { materializeEvent } from '@/lib/engine/simulation/event-engine';
 import { simulateQualifyingStep, simulateRaceStep, transitionWeekendStage } from '@/lib/engine/simulation/weekend-engine';
 import type { Decision, EventDefinition, EventInstance, WorldState } from '@/lib/schema';
@@ -200,13 +201,15 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
       const result = simulateQualifyingStep(state.world, seed);
       if (!result.ok || !result.qualifyingResult || !result.qualifyingPosition) return state;
 
+      const roundTag = `round-${state.world.currentSeason.round}`;
       return {
-        world: appendNews(
-          result.world,
-          `Qualified P${result.qualifyingPosition} at ${state.world.currentSeason.nextVenue}`,
-          `Session delta ${result.qualifyingResult.expectedDelta.toFixed(1)} vs expectation.`,
-          ['qualifying'],
-        ),
+        world: appendNews(result.world, {
+          id: createNewsId('qualifying', state.world.currentSeason.round, seed),
+          headline: `Qualified P${result.qualifyingPosition} at ${state.world.currentSeason.nextVenue}`,
+          summary: `Session delta ${result.qualifyingResult.expectedDelta.toFixed(1)} vs expectation.`,
+          tags: ['qualifying', roundTag],
+          createdAt: state.world.currentDate,
+        }),
       };
     }),
   simulateRace: (seed = 202) =>
@@ -214,13 +217,30 @@ export const useCareerStore = create<CareerStore>((set, get) => ({
       const result = simulateRaceStep(state.world, seed);
       if (!result.ok || !result.raceResult || !result.finishPosition || result.points === undefined) return state;
 
+      const round = state.world.currentSeason.round;
+      const raceHeadline = createRaceHeadline({
+        seed,
+        round,
+        venue: state.world.currentSeason.nextVenue,
+        driver: state.world.player.name,
+        finishPosition: result.finishPosition,
+        expectedPosition: result.expectedFinishPosition ?? result.finishPosition,
+        reputation: state.world.player.publicImage.respect,
+        recentForm: 100 - state.world.currentSeason.championshipPosition * 4,
+        controversy: state.world.player.publicImage.controversy,
+      });
+
       return {
-        world: appendNews(
-          clampCriticalState(result.world),
-          `Race finish P${result.finishPosition} at ${state.world.currentSeason.nextVenue}`,
-          result.points > 0 ? `Scored ${result.points} points and triggered paddock reaction.` : 'No points, pressure is rising.',
-          ['race'],
-        ),
+        world: appendNews(clampCriticalState(result.world), {
+          id: createNewsId('race', round, seed),
+          headline: raceHeadline.headline,
+          summary:
+            result.points > 0
+              ? `Scored ${result.points} points (${raceHeadline.band}, ${raceHeadline.tone} tone).`
+              : `No points scored (${raceHeadline.band}, ${raceHeadline.tone} tone).`,
+          tags: ['race', 'race-primary', `round-${round}`, `tone-${raceHeadline.tone}`, `band-${raceHeadline.band}`],
+          createdAt: state.world.currentDate,
+        }),
       };
     }),
   simulateWeekend: (seed = 99) => {

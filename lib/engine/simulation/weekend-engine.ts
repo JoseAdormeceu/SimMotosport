@@ -27,11 +27,13 @@ export interface TransitionResult {
 export interface QualifyingSimulationResult extends TransitionResult {
   qualifyingResult?: SessionResult;
   qualifyingPosition?: number;
+  expectedQualifyingPosition?: number;
 }
 
 export interface RaceSimulationResult extends TransitionResult {
   raceResult?: SessionResult;
   finishPosition?: number;
+  expectedFinishPosition?: number;
   points?: number;
   spawnedEvent?: EventInstance | null;
 }
@@ -87,8 +89,10 @@ export function simulateQualifyingStep(world: WorldState, seed: number): Qualify
       ? { ...world, currentSeason: { ...world.currentSeason, weekendStage: 'qualifying' as WeekendStage } }
       : world;
 
-  const qualifyingResult = simulateQualifying(buildPerformanceInput(stageFixedWorld, seed));
+  const perfInput = buildPerformanceInput(stageFixedWorld, seed);
+  const qualifyingResult = simulateQualifying(perfInput);
   const qualifyingPosition = scoreToGridPosition(qualifyingResult.score);
+  const expectedQualifyingPosition = scoreToGridPosition(perfInput.rawPace * 0.45 + perfInput.teamStrength * 0.55);
   const summary: WeekendSummary = {
     venue: world.currentSeason.nextVenue,
     qualifyingPosition,
@@ -101,6 +105,7 @@ export function simulateQualifyingStep(world: WorldState, seed: number): Qualify
     ok: true,
     qualifyingResult,
     qualifyingPosition,
+    expectedQualifyingPosition,
     world: {
       ...stageFixedWorld,
       lastWeekend: summary,
@@ -129,7 +134,10 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
     return { ok: false, reason: `Race simulation not allowed from stage ${world.currentSeason.weekendStage}`, world };
   }
 
-  const raceResult = simulateRace(buildPerformanceInput(world, seed));
+  const perfInput = buildPerformanceInput(world, seed);
+  const raceResult = simulateRace(perfInput);
+  const expectedBasePosition = scoreToGridPosition(perfInput.racePace * 0.5 + perfInput.teamStrength * 0.5);
+  const expectedFinishPosition = raceScoreToFinish(perfInput.racePace * 0.5 + perfInput.teamStrength * 0.5, world.lastWeekend.qualifyingPosition);
   const finishPosition = raceScoreToFinish(raceResult.score, world.lastWeekend.qualifyingPosition);
   const points = pointsForFinish(finishPosition);
 
@@ -148,6 +156,7 @@ export function simulateRaceStep(world: WorldState, seed: number): RaceSimulatio
     ok: true,
     raceResult,
     finishPosition,
+    expectedFinishPosition: Math.round((expectedFinishPosition + expectedBasePosition) / 2),
     points,
     spawnedEvent,
     world: {

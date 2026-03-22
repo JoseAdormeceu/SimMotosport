@@ -1,4 +1,4 @@
-import type { EventInstance, WorldState } from '@/lib/schema';
+import type { EventInstance, NewsItem, WorldState } from '@/lib/schema';
 import { worldStateSchema } from '@/lib/schema';
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -88,9 +88,23 @@ export function applyDecisionEffects(world: WorldState, event: EventInstance, ch
   return { ok: true, world: clampCriticalState(updated) };
 }
 
-export function appendNews(world: WorldState, headline: string, summary: string, tags: string[]): WorldState {
+function dedupeNews(items: NewsItem[]): NewsItem[] {
+  const seenIds = new Set<string>();
+  const seenTitles = new Set<string>();
+
+  return items.filter((item) => {
+    const normalizedHeadline = item.headline.trim().toLowerCase();
+    if (seenIds.has(item.id) || seenTitles.has(normalizedHeadline)) return false;
+    seenIds.add(item.id);
+    seenTitles.add(normalizedHeadline);
+    return true;
+  });
+}
+
+export function appendNews(world: WorldState, item: NewsItem): WorldState {
+  const merged = dedupeNews([item, ...world.newsFeed]);
   return {
     ...world,
-    newsFeed: [{ id: `news-${world.newsFeed.length + 1}-${world.currentDate}`, headline, summary, tags, createdAt: world.currentDate }, ...world.newsFeed].slice(0, 8),
+    newsFeed: merged.slice(0, 8),
   };
 }

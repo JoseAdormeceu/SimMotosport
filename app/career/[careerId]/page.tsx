@@ -66,7 +66,7 @@ export default function CareerDashboardPage() {
         <article className="rounded-xl border border-slate-800 bg-slate-900/80 p-4">
           <h2 className="text-sm uppercase text-slate-400">Recent Headlines</h2>
           <ul className="mt-2 space-y-2 text-slate-200">
-            {world.newsFeed.length ? world.newsFeed.slice(0, 3).map((item) => <li key={item.id}>• {item.headline}</li>) : <li>• No headlines yet.</li>}
+            {world.newsFeed.length ? world.newsFeed.slice(0, 3).map((item, index) => <li key={`${item.id}-${index}`}>• {item.headline}</li>) : <li key="no-headlines">• No headlines yet.</li>}
           </ul>
         </article>
       </section>
